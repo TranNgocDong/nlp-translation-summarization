@@ -41,9 +41,10 @@ class VIT5Summarizer:
         self,
         text: str,
         max_input_length: int = 512,
-        max_new_tokens: int = 128,
+        max_new_tokens: int = 256,
+        min_new_tokens: int = 48,
         num_beams: int = 4,
-        length_penalty: float = 1.0,
+        length_penalty: float = 1.15,
         early_stopping: bool = True,
         no_repeat_ngram_size: int = 3,
     ) -> dict[str, Any]:
@@ -55,14 +56,16 @@ class VIT5Summarizer:
             return_tensors="pt",
         )
         enc = {k: v.to(self.device) for k, v in enc.items()}
-        out_ids = self.model.generate(
-            **enc,
-            max_new_tokens=max_new_tokens,
-            num_beams=num_beams,
-            length_penalty=length_penalty,
-            early_stopping=early_stopping,
-            no_repeat_ngram_size=no_repeat_ngram_size,
-        )
+        gen_kw: dict[str, Any] = {
+            "max_new_tokens": max_new_tokens,
+            "num_beams": num_beams,
+            "length_penalty": length_penalty,
+            "early_stopping": early_stopping,
+            "no_repeat_ngram_size": no_repeat_ngram_size,
+        }
+        if min_new_tokens > 0:
+            gen_kw["min_new_tokens"] = min_new_tokens
+        out_ids = self.model.generate(**enc, **gen_kw)
         decoded = self.tokenizer.decode(out_ids[0], skip_special_tokens=True)
         return {
             "summary": _clean(decoded),
@@ -86,19 +89,25 @@ class DualVIT5Summarizer:
         text_en: str,
         num_beams: int = 4,
         max_input_length: int = 512,
-        max_new_tokens: int = 128,
+        max_new_tokens: int = 256,
+        min_new_tokens: int = 48,
+        length_penalty: float = 1.15,
     ) -> dict[str, str]:
         r_vi = self.vi.summarize(
             text_vi,
             max_input_length=max_input_length,
             max_new_tokens=max_new_tokens,
+            min_new_tokens=min_new_tokens,
             num_beams=num_beams,
+            length_penalty=length_penalty,
         )
         r_en = self.en.summarize(
             text_en,
             max_input_length=max_input_length,
             max_new_tokens=max_new_tokens,
+            min_new_tokens=min_new_tokens,
             num_beams=num_beams,
+            length_penalty=length_penalty,
         )
         return {
             "summary_vi": r_vi["summary"],

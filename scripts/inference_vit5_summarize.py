@@ -27,7 +27,10 @@ def main():
     p.add_argument("--text_en", default="", help="English text (when --lang en or both)")
     p.add_argument("--text_file", type=Path, default=None)
     p.add_argument("--num_beams", type=int, default=4)
-    p.add_argument("--max_new_tokens", type=int, default=128)
+    p.add_argument("--max_input_length", type=int, default=512)
+    p.add_argument("--max_new_tokens", type=int, default=256)
+    p.add_argument("--min_new_tokens", type=int, default=48)
+    p.add_argument("--length_penalty", type=float, default=1.15)
     args = p.parse_args()
 
     if args.text_file and args.text_file.is_file():
@@ -41,11 +44,25 @@ def main():
 
     if args.lang == "vi":
         s = VIT5Summarizer(args.checkpoint_vi)
-        out = s.summarize(text_vi, num_beams=args.num_beams, max_new_tokens=args.max_new_tokens)
+        out = s.summarize(
+            text_vi,
+            max_input_length=args.max_input_length,
+            num_beams=args.num_beams,
+            max_new_tokens=args.max_new_tokens,
+            min_new_tokens=args.min_new_tokens,
+            length_penalty=args.length_penalty,
+        )
         print(json.dumps({"summary_vi": out["summary"]}, ensure_ascii=False, indent=2))
     elif args.lang == "en":
         s = VIT5Summarizer(args.checkpoint_en)
-        out = s.summarize(text_en, num_beams=args.num_beams, max_new_tokens=args.max_new_tokens)
+        out = s.summarize(
+            text_en,
+            max_input_length=args.max_input_length,
+            num_beams=args.num_beams,
+            max_new_tokens=args.max_new_tokens,
+            min_new_tokens=args.min_new_tokens,
+            length_penalty=args.length_penalty,
+        )
         print(json.dumps({"summary_en": out["summary"]}, ensure_ascii=False, indent=2))
     else:
         dual = DualVIT5Summarizer(args.checkpoint_vi, args.checkpoint_en)
@@ -53,7 +70,10 @@ def main():
             text_vi,
             text_en,
             num_beams=args.num_beams,
+            max_input_length=args.max_input_length,
             max_new_tokens=args.max_new_tokens,
+            min_new_tokens=args.min_new_tokens,
+            length_penalty=args.length_penalty,
         )
         print(json.dumps(pair, ensure_ascii=False, indent=2))
 

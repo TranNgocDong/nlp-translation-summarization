@@ -1,5 +1,7 @@
+import argparse
 import json
 import os
+
 import torch
 from transformers import MarianMTModel, MarianTokenizer
 
@@ -25,32 +27,58 @@ def translate_text(text):
         print(f"Lỗi khi dịch: {e}")
         return ""
 
+def load_translated_map(path):
+    m = {}
+    if not os.path.exists(path):
+        return m
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            o = json.loads(line)
+            tv = o.get("text_vi")
+            if tv:
+                m[tv] = o
+    return m
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--replace",
+        action="store_true",
+        help="Dich lai tat ca dong trong summary_data, ghi de translated_data.jsonl",
+    )
+    args = ap.parse_args()
+
     if not os.path.exists(INPUT_FILE):
-        print(f"❌ Không tìm thấy {INPUT_FILE}. Bạn đã chạy bước 02 chưa?")
+        print(f"Khong tim thay {INPUT_FILE}. Chay buoc 02 truoc.")
         return
 
+    cached = {} if args.replace else load_translated_map(OUTPUT_FILE)
     data_out = []
-    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+    with open(INPUT_FILE, encoding="utf-8") as f:
         lines = f.readlines()
-        print(f"--- Đang dịch {len(lines)} bài viết (VI -> EN) ---")
-        
+        print(f"--- Dich {len(lines)} dong (VI -> EN) ---")
+
         for i, line in enumerate(lines):
             item = json.loads(line)
-            print(f"[{i+1}/{len(lines)}] Đang xử lý...")
-            
-            # Dịch summary và một phần nội dung chính
+            tv = item["text_vi"]
+            if tv in cached:
+                print(f"[{i+1}/{len(lines)}] Bo qua (da co ban dich)")
+                data_out.append(cached[tv])
+                continue
+            print(f"[{i+1}/{len(lines)}] Dang xu ly...")
             item["summary_en"] = translate_text(item["summary_vi"])
-            item["text_en"] = translate_text(item["text_vi"][:1000]) # Cắt bớt để chạy nhanh
-            
+            item["text_en"] = translate_text(item["text_vi"][:1000])
             data_out.append(item)
 
-    # Lưu file kết quả
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         for item in data_out:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
-    
-    print(f"✅ Xong! Đã tạo file: {OUTPUT_FILE}")
+
+    print(f"Xong: {OUTPUT_FILE}")
 
 if __name__ == "__main__":
     main()

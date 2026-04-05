@@ -1,8 +1,11 @@
+import argparse
+import json
+import os
+import random
+import time
+
 import requests
 from bs4 import BeautifulSoup
-import json
-import time
-import random
 
 BASE_URL = "https://vnexpress.net"
 CATEGORY_URL = "https://vnexpress.net/thoi-su"
@@ -83,8 +86,50 @@ def save_jsonl(data, filename="data/raw_data.jsonl"):
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 
-if __name__ == "__main__":
-    dataset = crawl_data(max_articles=50)
-    save_jsonl(dataset)
+def load_jsonl_raw(path):
+    rows = []
+    if not os.path.exists(path):
+        return rows
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append(json.loads(line))
+    return rows
 
-    print(f"Đã lưu {len(dataset)} bài vào file JSONL")
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--replace",
+        action="store_true",
+        help="Chi luu bai crawl lan nay, ghi de len raw_data.jsonl",
+    )
+    ap.add_argument("--max-articles", type=int, default=50)
+    args = ap.parse_args()
+
+    out_path = "data/raw_data.jsonl"
+    fresh = crawl_data(max_articles=args.max_articles)
+
+    if args.replace:
+        merged = fresh
+        before = 0
+    else:
+        existing = load_jsonl_raw(out_path)
+        before = len(existing)
+        seen = {r["text_vi"] for r in existing if r.get("text_vi")}
+        merged = list(existing)
+        for row in fresh:
+            tv = row.get("text_vi")
+            if tv and tv not in seen:
+                seen.add(tv)
+                merged.append(row)
+
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    save_jsonl(merged, out_path)
+
+    if args.replace:
+        print(f"Ghi de {len(merged)} bai vao {out_path}")
+    else:
+        print(f"Tong {len(merged)} bai trong {out_path} (truoc {before}, them {len(merged) - before})")

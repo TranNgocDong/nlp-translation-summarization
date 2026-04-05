@@ -1,6 +1,8 @@
+import argparse
 import json
 import os
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 # Model này chuyên tóm tắt đa ngôn ngữ (có Tiếng Việt)
 MODEL_NAME = "csebuetnlp/mT5_multilingual_XLSum"
@@ -26,29 +28,55 @@ def summarize_text(text):
         print(f"Lỗi tóm tắt: {e}")
         return ""
 
+def load_summary_map(path):
+    m = {}
+    if not os.path.exists(path):
+        return m
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            o = json.loads(line)
+            tv = o.get("text_vi")
+            if tv:
+                m[tv] = o
+    return m
+
+
 def main():
-    if not os.path.exists("data"): os.makedirs("data")
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--replace",
+        action="store_true",
+        help="Tom tat lai tat ca dong trong raw_data, ghi de summary_data.jsonl",
+    )
+    args = ap.parse_args()
+
+    if not os.path.exists("data"):
+        os.makedirs("data")
+    cached = {} if args.replace else load_summary_map(OUTPUT_FILE)
     data_out = []
 
-    print("--- Đang tải dữ liệu và tóm tắt (vui lòng đợi) ---")
-    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+    print("--- Dang tai du lieu va tom tat ---")
+    with open(INPUT_FILE, encoding="utf-8") as f:
         for i, line in enumerate(f):
             item = json.loads(line)
             text_vi = item["text_vi"]
-
-            print(f"[{i+1}] Đang tóm tắt bài viết...")
+            if text_vi in cached:
+                print(f"[{i+1}] Bo qua (da co tom tat)")
+                data_out.append(cached[text_vi])
+                continue
+            print(f"[{i+1}] Dang tom tat...")
             summary_vi = summarize_text(text_vi)
-
-            data_out.append({
-                "text_vi": text_vi,
-                "summary_vi": summary_vi
-            })
+            row = {"text_vi": text_vi, "summary_vi": summary_vi}
+            data_out.append(row)
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         for item in data_out:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-    print("✔ Done summary!")
+    print("Done summary!")
 
 if __name__ == "__main__":
     main()
