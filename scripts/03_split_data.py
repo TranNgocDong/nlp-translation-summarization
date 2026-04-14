@@ -1,90 +1,81 @@
+import sys
+import random
+
+# Thiết lập encoding cho stdout để tránh lỗi Unicode trên Windows
+if sys.stdout.encoding != 'utf-8':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 import argparse
 import json
 import os
-import random
 
-INPUT_FILE = "data/translated_data.jsonl"
-
+# File đầu vào (có thể từ bước 02 hoặc bước 04)
+INPUT_FILE = "data/summary_data.jsonl" # Chỉnh lại để có thể dùng ngay sau bước 02
 TRAIN_FILE = "data/processed/train.jsonl"
 VAL_FILE = "data/processed/val.jsonl"
 
-
-def load_data():
+def load_data(path):
     data = []
-    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+    if not os.path.exists(path): return data
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             item = json.loads(line)
-
-            # lọc data lỗi
-            if all([
-                item.get("text_vi"),
-                item.get("summary_vi"),
-                item.get("text_en"),
-                item.get("summary_en")
-            ]):
+            # Lọc dữ liệu tối thiểu phải có Văn bản và Tóm tắt
+            if item.get("text_vi") and item.get("summary_vi"):
                 data.append(item)
-
     return data
-
 
 def split_data(data, ratio=0.8):
     random.shuffle(data)
     split_idx = int(len(data) * ratio)
-
     return data[:split_idx], data[split_idx:]
 
-
 def save_jsonl(data, path):
-    d = os.path.dirname(path)
-    if d:
-        os.makedirs(d, exist_ok=True)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         for item in data:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-
-def load_jsonl(path):
-    rows = []
-    if not os.path.exists(path):
-        return rows
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            rows.append(json.loads(line))
-    return rows
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--replace",
-        action="store_true",
-        help="Xao tron toan bo translated_data va ghi de train/val",
-    )
+    ap.add_argument("--replace", action="store_true", help="Ghi đè hoàn toàn tập Train/Val")
+    ap.add_argument("--input", type=str, default=INPUT_FILE, help="File đầu vào")
     args = ap.parse_args()
 
-    data = load_data()
+    # Thử tìm file translated trước, nếu không có thì dùng file summary
+    actual_input = args.input
+    if not os.path.exists(actual_input) and os.path.exists("data/translated_data.jsonl"):
+        actual_input = "data/translated_data.jsonl"
+
+    print(f"--- Đang chia dữ liệu từ: {actual_input} ---")
+    data = load_data(actual_input)
+    
+    if not data:
+        print("Không có dữ liệu hợp lệ để chia.")
+        return
+
     if args.replace:
         train, val = split_data(data)
-        print(f"Train: {len(train)} | Val: {len(val)} (replace)")
     else:
-        train = load_jsonl(TRAIN_FILE)
-        val = load_jsonl(VAL_FILE)
-        seen = {r["text_vi"] for r in train + val if r.get("text_vi")}
-        new_rows = [x for x in data if x.get("text_vi") and x["text_vi"] not in seen]
-        if not new_rows:
-            print("Khong co mau moi so voi train/val hien tai.")
+        existing_train = load_data(TRAIN_FILE)
+        existing_val = load_data(VAL_FILE)
+        
+        # Dùng URL hoặc text_vi để kiểm tra trùng
+        seen = {r.get("url") or r.get("text_vi") for r in existing_train + existing_val}
+        new_data = [x for x in data if (x.get("url") or x.get("text_vi")) not in seen]
+        
+        if not new_data:
+            print("Không có dữ liệu mới.")
             return
-        tr, va = split_data(new_rows)
-        train = train + tr
-        val = val + va
-        print(f"Them {len(new_rows)} mau: train +{len(tr)}, val +{len(va)} | Tong train {len(train)}, val {len(val)}")
+            
+        tr, va = split_data(new_data)
+        train = existing_train + tr
+        val = existing_val + va
 
     save_jsonl(train, TRAIN_FILE)
     save_jsonl(val, VAL_FILE)
-
+    print(f"✅ Hoàn tất: Train ({len(train)} bài), Val ({len(val)} bài)")
 
 if __name__ == "__main__":
     main()

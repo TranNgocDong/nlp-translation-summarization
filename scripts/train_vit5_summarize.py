@@ -138,6 +138,7 @@ def main():
         logging_steps=10,
         predict_with_generate=False,
         fp16=use_fp16,
+        save_safetensors=False,
         report_to="none",
     )
 
@@ -147,7 +148,7 @@ def main():
         train_dataset=train_ds,
         eval_dataset=val_ds,
         data_collator=collator,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
     )
 
     trainer.train()
