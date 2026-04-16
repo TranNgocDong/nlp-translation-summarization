@@ -7,13 +7,26 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 DEFAULT_PREFIX = "summarize: "
 
-_LEADING_NOISE = re.compile(r"^[\s*\-•·–—]+")
+_LEADING_NOISE = re.compile(r"^[\s*\-•·–—+]+")
+_MID_NOISE = re.compile(r"[<>\[\]{}|~`^]+")
+_REPEAT_PUNCT = re.compile(r"([,.;:!?])\1+")
+
+
+def _normalize_input(text: str) -> str:
+    text = text.replace("\u00a0", " ")
+    text = _MID_NOISE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 def _clean(text: str) -> str:
+    text = text.replace(" + ", ". ")
     text = _LEADING_NOISE.sub("", text).strip()
+    text = _MID_NOISE.sub(" ", text)
+    text = _REPEAT_PUNCT.sub(r"\1", text)
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
     text = re.sub(r"\s+", " ", text)
-    return text
+    return text.strip()
 
 
 class VIT5Summarizer:
@@ -27,7 +40,7 @@ class VIT5Summarizer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.prefix = prefix
         self.lang_label = lang_label
-        self.tokenizer = AutoTokenizer.from_pretrained(str(self.checkpoint_dir))
+        self.tokenizer = AutoTokenizer.from_pretrained(str(self.checkpoint_dir), use_fast=False)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(str(self.checkpoint_dir))
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -40,7 +53,7 @@ class VIT5Summarizer:
     def summarize(
         self,
         text: str,
-        max_input_length: int = 512,
+        max_input_length: int = 1024,
         max_new_tokens: int = 256,
         min_new_tokens: int = 48,
         num_beams: int = 4,
@@ -48,29 +61,66 @@ class VIT5Summarizer:
         early_stopping: bool = True,
         no_repeat_ngram_size: int = 3,
     ) -> dict[str, Any]:
-        src = self.prefix + text
+        res = self.summarize_batch(
+            [text],
+            max_input_length=max_input_length,
+            max_new_tokens=max_new_tokens,
+            min_new_tokens=min_new_tokens,
+            num_beams=num_beams,
+            length_penalty=length_penalty,
+            early_stopping=early_stopping,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+        )
+        return res[0]
+
+    @torch.inference_mode()
+    def summarize_batch(
+        self,
+        texts: list[str],
+        max_input_length: int = 1024,
+        max_new_tokens: int = 256,
+        min_new_tokens: int = 48,
+        num_beams: int = 4,
+        length_penalty: float = 1.15,
+        early_stopping: bool = True,
+        no_repeat_ngram_size: int = 3,
+    ) -> list[dict[str, Any]]:
+        if not texts:
+            return []
+            
+        normalized_texts = [_normalize_input(t) for t in texts]
+        srcs = [self.prefix + t for t in normalized_texts]
+        
         enc = self.tokenizer(
-            src,
+            srcs,
             max_length=max_input_length,
+            padding=True,
             truncation=True,
             return_tensors="pt",
         )
         enc = {k: v.to(self.device) for k, v in enc.items()}
+        
         gen_kw: dict[str, Any] = {
             "max_new_tokens": max_new_tokens,
+            "min_new_tokens": min_new_tokens,
             "num_beams": num_beams,
             "length_penalty": length_penalty,
             "early_stopping": early_stopping,
             "no_repeat_ngram_size": no_repeat_ngram_size,
+            "repetition_penalty": 1.8,
+            "do_sample": False,
         }
-        if min_new_tokens > 0:
-            gen_kw["min_new_tokens"] = min_new_tokens
+        
         out_ids = self.model.generate(**enc, **gen_kw)
-        decoded = self.tokenizer.decode(out_ids[0], skip_special_tokens=True)
-        return {
-            "summary": _clean(decoded),
-            "language": self.lang_label,
-        }
+        decoded_list = self.tokenizer.batch_decode(out_ids, skip_special_tokens=True)
+        
+        results = []
+        for decoded in decoded_list:
+            results.append({
+                "summary": _clean(decoded),
+                "language": self.lang_label,
+            })
+        return results
 
 
 class DualVIT5Summarizer:

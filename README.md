@@ -95,10 +95,22 @@ Quy trình sử dụng cơ bản:
 3. Bấm `Process`.
 4. Hệ thống sẽ gọi `POST /api/process` và trả về:
 
-- `summary_vi`
-- `summary_en`
+- `summary_vi` (trường tương thích ngược: summary đang active)
+- `summary_en` (trường tương thích ngược: summary đang active)
+- `summary_vi_original` (bản gốc)
+- `summary_vi_dpo` (bản DPO)
+- `summary_en_original` (bản gốc tiếng Anh)
 - `translated_text_en`
 - `entities`
+
+Ngoài ra có tham số `summary_mode` trong request:
+- `original`: chỉ chạy bản gốc
+- `dpo`: chỉ chạy bản DPO (hiện áp dụng cho tiếng Việt)
+- `both`: chạy đồng thời bản gốc + DPO (tiếng Việt)
+
+API hiện có cơ chế **auto-hierarchical summarization**:
+- Nếu `input_tokens` vượt ngưỡng an toàn theo `max_input_length`, hệ thống tự chuyển sang tóm tắt phân cấp.
+- Trạng thái này được phản ánh trong metadata: `auto_hierarchical`, `input_tokens`.
 
 ### Bước 8: Thử suy luận bằng dòng lệnh
 

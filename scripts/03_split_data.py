@@ -1,5 +1,5 @@
 import sys
-import random
+import hashlib
 
 # Thiết lập encoding cho stdout để tránh lỗi Unicode trên Windows
 if sys.stdout.encoding != 'utf-8':
@@ -26,10 +26,25 @@ def load_data(path):
                 data.append(item)
     return data
 
-def split_data(data, ratio=0.8):
-    random.shuffle(data)
-    split_idx = int(len(data) * ratio)
-    return data[:split_idx], data[split_idx:]
+def _stable_key(item: dict) -> str:
+    return str(item.get("url") or item.get("content_hash") or item.get("text_vi") or "")
+
+
+def _is_train_bucket(key: str, train_ratio: float) -> bool:
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    bucket = int(h, 16) % 10000
+    return bucket < int(train_ratio * 10000)
+
+
+def split_data_hash_stable(data, train_ratio=0.8):
+    train, val = [], []
+    for item in data:
+        key = _stable_key(item)
+        if not key:
+            val.append(item)
+            continue
+        (train if _is_train_bucket(key, train_ratio) else val).append(item)
+    return train, val
 
 def save_jsonl(data, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -41,7 +56,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--replace", action="store_true", help="Ghi đè hoàn toàn tập Train/Val")
     ap.add_argument("--input", type=str, default=INPUT_FILE, help="File đầu vào")
+    ap.add_argument("--train_ratio", type=float, default=0.8, help="Tỷ lệ train (hash-stable)")
     args = ap.parse_args()
+    train_ratio = args.train_ratio
+    if train_ratio <= 0 or train_ratio >= 1:
+        raise ValueError("--train_ratio phải nằm trong (0, 1)")
 
     # Thử tìm file translated trước, nếu không có thì dùng file summary
     actual_input = args.input
@@ -56,7 +75,7 @@ def main():
         return
 
     if args.replace:
-        train, val = split_data(data)
+        train, val = split_data_hash_stable(data, train_ratio=train_ratio)
     else:
         existing_train = load_data(TRAIN_FILE)
         existing_val = load_data(VAL_FILE)
@@ -69,7 +88,7 @@ def main():
             print("Không có dữ liệu mới.")
             return
             
-        tr, va = split_data(new_data)
+        tr, va = split_data_hash_stable(new_data, train_ratio=train_ratio)
         train = existing_train + tr
         val = existing_val + va
 

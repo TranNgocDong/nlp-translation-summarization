@@ -166,6 +166,7 @@ def load_existing_metadata(filepath):
 def get_article_links(category_url, config):
     try:
         response = requests.get(category_url, headers=get_random_header(), timeout=10)
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         links = []
         articles = soup.select(config["list_selector"])
@@ -182,16 +183,20 @@ def get_article_links(category_url, config):
 def get_article_content(url, config):
     try:
         response = requests.get(url, headers=get_random_header(), timeout=15)
+        response.raise_for_status()
         response.encoding = 'utf-8'
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # ===== 🧹 XÓA CÁC THÀNH PHẦN GÂY NHIỄU =====
+        # ===== 🧹 XÓA CÁC THÀNH PHẦN GÂY NHIỄU (CẬP NHẬT THÊM) =====
         unwanted_selectors = [
             "div.box-comment", "div.tags", "style", "script",
             "div.tin-lien-quan", "div.relate-news", 
             "div.VCSortableInPreviewMode",
             "figcaption", "div.author",
-            "div.social", "div.share", "iframe"
+            "div.social", "div.share", "iframe",
+            # Thêm các thẻ thường chứa chú thích ảnh, video, quảng cáo
+            "figure", "picture", "div.video", "div.banner", 
+            "table.picture", "p.Image", ".hidden", "[style*='display: none']"
         ]
 
         for unwanted in soup.select(", ".join(unwanted_selectors)):
@@ -215,25 +220,36 @@ def get_article_content(url, config):
         if config.get("content_selector"):
             paragraphs = soup.select(config["content_selector"])
             content_list = []
+            seen_texts = set() # 🟢 THÊM: Bộ lặp để check trùng nội dung
 
             for p in paragraphs:
                 txt = clean_text(p.get_text(" ", strip=True))
 
-                # 🚫 Lọc nội dung rác
+                # 🚫 Lọc nội dung rác (rỗng)
                 if not txt:
                     continue
 
                 blacklist = [
                     "Tối đa:", "ký tự", "bình luận", 
                     "chia sẻ", "quảng cáo", 
-                    "xem thêm", "đọc thêm"
+                    "xem thêm", "đọc thêm",
+                    "Đồ họa:", "Ảnh:", "Video:" # Thêm keyword chặn nguồn ảnh/video
                 ]
 
                 if any(b.lower() in txt.lower() for b in blacklist):
                     continue
 
-                # 🚫 bỏ đoạn quá ngắn
+                # 🚫 Bỏ đoạn quá ngắn (thường là rác hoặc tag thừa)
                 if len(txt.split()) < 5:
+                    continue
+                
+                # 🟢 THÊM: Chống lặp đoạn văn (Trị dứt điểm lỗi lặp 2-3 lần)
+                if txt in seen_texts:
+                    continue
+                seen_texts.add(txt)
+
+                # Kiểm tra nếu đoạn văn trùng với sapo thì bỏ qua
+                if txt == sapo:
                     continue
 
                 content_list.append(txt)
@@ -280,7 +296,7 @@ def crawl_data(max_articles_per_source=20):
             print(f"Đang cào: {clean_link}")
             res = get_article_content(clean_link, config)
             
-            if res and res["sapo_vi"] and len(res["content_vi"].split()) > 100:
+            if res and len(res["content_vi"].split()) > 100:
                 c_hash = compute_hash(res["content_vi"])
                 if c_hash in existing_hashes:
                     print("Bỏ qua (Nội dung trùng với bài khác).")
