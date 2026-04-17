@@ -1,0 +1,12 @@
+{
+  "source_directories": [
+    "."
+  ],
+  "exclude": [
+    ".*/env/.*",
+    ".*/models/.*",
+    ".*/data/.*",
+    ".*/__pycache__/.*",
+    ".*/\\.git/.*"
+  ]
+}
