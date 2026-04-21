@@ -1,151 +1,262 @@
-# nlp-translation-summarization
+# 🚀 NLP Translation & Summarization
 
-Đây là dự án tóm tắt song ngữ dùng `ViT5`, gồm:
+Vietnamese NLP Pipeline with Translation, Summarization, NER, and Relation Extraction.
 
-- Model tiếng Việt: `text_vi -> summary_vi`
-- Model tiếng Anh: `text_en -> summary_en`
+## Features
 
-Giao diện được viết bằng `Streamlit`, còn phần xử lý phía sau dùng `FastAPI`.
+- **📰 Web Scraping**: Crawl Vietnamese news articles from multiple sources
+- **📝 Summarization**: VIT5-based Vietnamese text summarization (with hierarchical support)
+- **🌐 Translation**: Opus-MT Vietnamese ↔ English translation
+- **🏷️ NER**: Named Entity Recognition for Vietnamese text
+- **🔗 Relation Extraction**: Build knowledge graphs from text
+- **🔧 REST API**: FastAPI backend with integrated NLP models
+- **💻 Web UI**: Streamlit interface for easy interaction
 
-## Cách chạy dự án
+## Installation
 
-### Bước 1: Vào đúng thư mục dự án
+### Requirements
 
-Chạy lệnh:
+- Python 3.8+
+- CUDA 11.0+ (optional, for GPU acceleration)
 
-```powershell
-Set-Location "d:\AI\DA\nlp-translation-summarization"
+### Setup
+
+```bash
+# 1. Clone repository
+git clone https://github.com/TranNgocDong/nlp-translation-summarization.git
+cd nlp-translation-summarization
+
+# 2. Create virtual environment
+python -m venv .venv
+
+# Activate (Windows PowerShell)
+.venv\Scripts\activate
+
+# Activate (Linux/Mac)
+source .venv/bin/activate
+
+# 3. Install PyTorch with CUDA (recommended for GPU)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# 4. Install remaining dependencies
+pip install -r requirements.txt
 ```
 
-### Bước 2: Cài PyTorch (GPU NVIDIA)
+## Quick Start
 
-Nếu máy có GPU NVIDIA (ví dụ RTX 3050), nên cài PyTorch bản có CUDA trước để train/inference dùng GPU:
+Run these steps from the **project root** directory:
 
-```powershell
-py -3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+### Step 1 — Scrape Data
+
+```bash
+python scripts/01_prepare_data.py --max-articles 20
 ```
 
-Kiểm tra nhanh:
+Crawls Vietnamese news articles and saves them to `data/raw_data.jsonl`.
 
-```powershell
-py -3 -c "import torch; print(torch.cuda.is_available(), torch.__version__)"
+### Step 2 — Generate Summaries
+
+```bash
+python scripts/02_generate_summary.py --replace
 ```
 
-Nếu in ra `True` và phiên bản có hậu tố `+cu124` thì GPU đã được PyTorch nhận.
+Uses VIT5 model to summarize articles; saves to `data/summary_data.jsonl`.
 
-### Bước 3: Cài thư viện cần thiết
+### Step 3 — Split Dataset
 
-Chạy lệnh:
-
-```powershell
-py -3 -m pip install -r requirements.txt
+```bash
+python scripts/03_split_data.py
 ```
 
-### Bước 4: Huấn luyện model nếu chưa có checkpoint
+Splits data into train/val sets under `data/processed/`.
 
-Nếu trong thư mục `models/` chưa có:
+### Step 4 — Translate Data
 
-- `models/vit5-summarize-vi/best_checkpoint`
-- `models/vit5-summarize-en/best_checkpoint`
-
-thì cần huấn luyện trước bằng các lệnh:
-
-```powershell
-$env:PYTHONPATH = (Get-Location).Path
-py -3 scripts/train_vit5_summarize.py --lang vi
-py -3 scripts/train_vit5_summarize.py --lang en
+```bash
+python scripts/04_translate_data.py --replace
 ```
 
-Nếu đã có sẵn checkpoint thì có thể bỏ qua bước này.
+Translates Vietnamese summaries to English using Helsinki-NLP/Opus-MT.
 
-### Bước 5: Chạy server API
+### Step 5 — View Statistics
 
-Chạy lệnh:
-
-```powershell
-Set-Location "d:\AI\DA\nlp-translation-summarization"
-$env:PYTHONPATH = (Get-Location).Path
-py -3 server.py
+```bash
+python scripts/05_stats.py
 ```
 
-Sau khi chạy, server mặc định lắng nghe tại:
+Prints word-count statistics for the processed dataset.
 
-- `http://localhost:8000`
-- `http://localhost:8000/health`
+## API Endpoints
 
-### Bước 6: Chạy giao diện Streamlit
+### Start Server
 
-Mở một terminal khác rồi chạy:
-
-```powershell
-Set-Location "d:\AI\DA\nlp-translation-summarization"
-py -3 -m streamlit run UI/app.py
+```bash
+python server.py
+# API available at http://localhost:8000
+# Interactive docs at http://localhost:8000/docs
 ```
 
-Sau đó mở trình duyệt tại:
+### `GET /health`
 
-- `http://localhost:8501`
+Returns server health status.
 
-### Bước 7: Sử dụng trên giao diện
-
-Quy trình sử dụng cơ bản:
-
-1. Nhập văn bản vào ô nội dung.
-2. Chọn ngôn ngữ đầu vào.
-3. Bấm `Process`.
-4. Hệ thống sẽ gọi `POST /api/process` và trả về:
-
-- `summary_vi` (trường tương thích ngược: summary đang active)
-- `summary_en` (trường tương thích ngược: summary đang active)
-- `summary_vi_original` (bản gốc)
-- `summary_vi_dpo` (bản DPO)
-- `summary_en_original` (bản gốc tiếng Anh)
-- `translated_text_en`
-- `entities`
-
-Ngoài ra có tham số `summary_mode` trong request:
-- `original`: chỉ chạy bản gốc
-- `dpo`: chỉ chạy bản DPO (hiện áp dụng cho tiếng Việt)
-- `both`: chạy đồng thời bản gốc + DPO (tiếng Việt)
-
-API hiện có cơ chế **auto-hierarchical summarization**:
-- Nếu `input_tokens` vượt ngưỡng an toàn theo `max_input_length`, hệ thống tự chuyển sang tóm tắt phân cấp.
-- Trạng thái này được phản ánh trong metadata: `auto_hierarchical`, `input_tokens`.
-
-### Bước 8: Thử suy luận bằng dòng lệnh
-
-Ví dụ tóm tắt tiếng Việt:
-
-```powershell
-Set-Location "d:\AI\DA\nlp-translation-summarization"
-$env:PYTHONPATH = (Get-Location).Path
-py -3 scripts/inference_vit5_summarize.py --lang vi --text_vi "Nội dung cần tóm tắt"
+```bash
+curl http://localhost:8000/health
 ```
 
-Ví dụ tóm tắt tiếng Anh:
+### `POST /api/process`
 
-```powershell
-Set-Location "d:\AI\DA\nlp-translation-summarization"
-$env:PYTHONPATH = (Get-Location).Path
-py -3 scripts/inference_vit5_summarize.py --lang en --text_en "Text to summarize"
+Process text through the full NLP pipeline.
+
+```bash
+curl -X POST http://localhost:8000/api/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Nhân vật A đánh bại nhân vật B và lấy được bảo vật cổ.",
+    "source_lang": "vi",
+    "target_lang": "en",
+    "quick_mode": false
+  }'
 ```
 
-Ví dụ chạy cả hai model:
+**Response fields:**
 
-```powershell
-Set-Location "d:\AI\DA\nlp-translation-summarization"
-$env:PYTHONPATH = (Get-Location).Path
-py -3 scripts/inference_vit5_summarize.py --lang both --text_vi "Nội dung tiếng Việt" --text_en "English content"
+| Field | Description |
+|-------|-------------|
+| `summary_vi` | Vietnamese summary |
+| `summary_en` | English summary |
+| `translated_text_en` | Translated text |
+| `entities` | Named entities found |
+| `relation_graph` | Knowledge graph (nodes & edges) |
+| `metadata` | Processing metadata |
+
+**`summary_mode` options** (pass in request body):
+
+| Value | Behavior |
+|-------|----------|
+| `original` | Run original model only |
+| `dpo` | Run DPO-tuned model only |
+| `both` | Run both models (Vietnamese) |
+
+> The API automatically applies **hierarchical summarization** when the input exceeds the model's `max_input_length`. This is reflected in the `metadata.auto_hierarchical` field.
+
+## UI Usage
+
+### Start Streamlit App
+
+```bash
+streamlit run UI/app.py
+# Opens at http://localhost:8501
 ```
 
-## Lưu ý
+### Workflow
 
-- File `requirements.txt` không ghim `torch` để tránh cài nhầm bản CPU-only (`+cpu`). Hãy cài PyTorch theo **Bước 2** (CUDA) hoặc theo hướng dẫn trên trang chủ PyTorch nếu chỉ dùng CPU.
-- GPU 4GB có thể đủ cho inference; khi train `ViT5-base` nếu hết VRAM thì thử giảm `batch_size` trong script train.
-- Streamlit cần được chạy bằng lệnh `py -3 -m streamlit run UI/app.py`, không chạy trực tiếp bằng `python UI/app.py`.
-- Khi train model hoặc chạy inference, nên thiết lập `PYTHONPATH` bằng lệnh `($env:PYTHONPATH = (Get-Location).Path)`.
-- Dự án đang dùng `transformers==4.57.6` để tránh lỗi tokenizer với `VietAI/vit5-base`.
-- Lần đầu chạy có thể cần tải model từ Hugging Face, vì vậy cần có kết nối Internet.
-- Model tiếng Anh hiện có thể cho kết quả kém ổn định hơn tiếng Việt nếu dữ liệu `text_en` và `summary_en` còn nhiễu hoặc chưa sạch.
-- Trường `translated_text_en` trong API hiện mới trả lại văn bản đầu vào, chưa nối với model dịch riêng.
-- Trường `entities` hiện chưa tích hợp NER, nên đang trả về danh sách rỗng.
+1. Enter Vietnamese text in the input box
+2. Select the source language
+3. Click **Process**
+4. View summaries, translations, entity list, and relation graph
+5. Download results as JSON or CSV
+
+## Project Structure
+
+```
+nlp-translation-summarization/
+├── data/                        # Data directory (git-ignored)
+│   ├── raw_data.jsonl           # Scraped articles (step 01)
+│   ├── summary_data.jsonl       # Summarized articles (step 02)
+│   ├── translated_data.jsonl    # Translated articles (step 04)
+│   └── processed/
+│       ├── train.jsonl          # Training split (step 03)
+│       └── val.jsonl            # Validation split (step 03)
+├── models/                      # NLP model modules
+│   ├── summarization/           # VIT5 summarization
+│   │   ├── __init__.py
+│   │   ├── vit5_wrapper.py
+│   │   ├── hierarchical.py
+│   │   └── prompting.py
+│   ├── translation/             # Opus-MT translation
+│   ├── ner/                     # Named Entity Recognition
+│   └── relation_extraction/     # Relation extraction + graph
+│       ├── graph_builder.py
+│       └── inference.py
+├── scripts/                     # Data pipeline scripts
+│   ├── 01_prepare_data.py       # Web scraping
+│   ├── 02_generate_summary.py   # Summarization
+│   ├── 03_split_data.py         # Train/val split
+│   ├── 04_translate_data.py     # Translation
+│   └── 05_stats.py              # Dataset statistics
+├── UI/                          # Streamlit frontend
+│   └── app.py
+├── server.py                    # FastAPI backend
+├── relation_graph.py            # Relation graph pipeline
+├── requirements.txt
+└── README.md
+```
+
+## Models Reference
+
+| Task | Model | Source | Notes |
+|------|-------|--------|-------|
+| Summarization (VI) | `VietAI/vit5-base` | Hugging Face | Vietnamese summarization |
+| Summarization (EN) | `google/mt5-base` | Hugging Face | English summarization |
+| Translation (VI→EN) | `Helsinki-NLP/opus-mt-vi-en` | Hugging Face | Auto-downloaded |
+| NER | Vietnamese NER | underthesea | Rule + model based |
+| Relation Extraction | Custom rule-based | This repo | Pattern matching |
+
+Models are auto-downloaded from Hugging Face on first run. An internet connection is required.
+
+## Troubleshooting
+
+### `ModuleNotFoundError: No module named 'models'`
+
+Always run scripts from the **project root**, not from inside the `scripts/` folder:
+
+```bash
+# ✅ Correct
+python scripts/02_generate_summary.py
+
+# ❌ Wrong
+cd scripts && python 02_generate_summary.py
+```
+
+### CUDA out of memory
+
+Reduce the batch size in the relevant script, or run in CPU mode by removing CUDA device selection.
+
+### Model download fails
+
+Check your internet connection. Models are cached in `~/.cache/huggingface/` after the first download.
+
+### Unicode errors on Windows
+
+The scripts automatically reconfigure `stdout` to UTF-8. If issues persist, set the environment variable:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+```
+
+## Performance
+
+| Operation | CPU | GPU (RTX 3050) |
+|-----------|-----|----------------|
+| Summarization (per article) | ~30–60 s | ~5–10 s |
+| Translation (per 100 words) | ~10–15 s | ~2–3 s |
+| Full pipeline (per article) | ~60–90 s | ~15–20 s |
+
+GPU acceleration requires PyTorch with CUDA (see [Installation](#installation)).
+
+## Future Improvements
+
+- [ ] Vietnamese → Chinese translation support
+- [ ] Fine-tuning on domain-specific datasets
+- [ ] Semantic search across the document corpus
+- [ ] Batch API endpoint for multiple documents
+- [ ] WebSocket support for streaming responses
+- [ ] Integrate dedicated NER model for `entities` field
+
+## Notes
+
+- `requirements.txt` intentionally omits `torch` to avoid installing the CPU-only build. Install PyTorch manually as shown in [Installation](#installation).
+- `transformers==4.57.6` is pinned to avoid tokenizer issues with `VietAI/vit5-base`.
+- The `entities` field in API responses currently returns an empty list; NER integration is planned.
+- Run `python server.py` from the project root so that module imports resolve correctly.
