@@ -4,9 +4,14 @@ import os
 import random
 import sys
 import time
+from pathlib import Path
 from urllib.parse import urljoin, urlparse, urlunparse
 import re
 import hashlib
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import requests
 from bs4 import BeautifulSoup
