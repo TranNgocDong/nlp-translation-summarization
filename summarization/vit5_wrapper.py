@@ -15,7 +15,8 @@ _REPEAT_PUNCT = re.compile(r"([,.;:!?])\1+")
 def _normalize_input(text: str) -> str:
     text = text.replace("\u00a0", " ")
     text = _MID_NOISE.sub(" ", text)
-    text = re.sub(r"\s+", " ", text)
+    # Không dùng \s+ vì nó sẽ xóa mất dấu xuống dòng \n
+    text = re.sub(r"[ \t]+", " ", text) 
     return text.strip()
 
 
@@ -89,7 +90,14 @@ class VIT5Summarizer:
             return []
             
         normalized_texts = [_normalize_input(t) for t in texts]
-        srcs = [self.prefix + t for t in normalized_texts]
+        
+        srcs = []
+        for t in normalized_texts:
+            # logic đồng bộ với JsonlSummarizeDataset trong train_vit5_summarize.py
+            if "Từ khóa bắt buộc:" in t or "Nội dung:" in t:
+                srcs.append(t) # Không thêm gánh nặng prefix
+            else:
+                srcs.append(self.prefix + t)
         
         enc = self.tokenizer(
             srcs,
@@ -107,7 +115,7 @@ class VIT5Summarizer:
             "length_penalty": length_penalty,
             "early_stopping": early_stopping,
             "no_repeat_ngram_size": no_repeat_ngram_size,
-            "repetition_penalty": 1.8,
+            "repetition_penalty": 1.0, # Về mặc định 1.0 để AI tự nhiên nhất
             "do_sample": False,
         }
         

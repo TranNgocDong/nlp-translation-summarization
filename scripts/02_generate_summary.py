@@ -51,6 +51,26 @@ def summarize_text(text):
         print(f"Lỗi tóm tắt: {e}")
         return ""
 
+def has_repetitive_ngrams(text, n=3, min_unique_ratio=0.7):
+    """Kiểm tra xem văn bản có bị lặp lại các cụm từ (n-gram) quá nhiều không."""
+    words = text.lower().split()
+    if len(words) < n:
+        return False
+        
+    # Tạo danh sách các N-gram
+    ngrams = [" ".join(words[i:i+n]) for i in range(len(words)-n+1)]
+    if not ngrams:
+        return False
+    
+    # Đếm số lượng N-gram duy nhất
+    unique_ngrams = set(ngrams)
+    
+    # Nếu tỷ lệ N-gram duy nhất thấp hơn 70% -> Bị lặp rác
+    if len(unique_ngrams) / len(ngrams) < min_unique_ratio:
+        return True
+        
+    return False
+
 def load_summary_map(path):
     m = {}
     if not os.path.exists(path):
@@ -196,6 +216,10 @@ def main():
                         
                     # 2. Chống AI lười (chép y chang Title hoặc Sapo)
                     if summary_vi.lower() in title.lower() or summary_vi.lower() in sapo.lower():
+                        continue
+                        
+                    # 3. Chống AI bị lỗi lặp từ (N-gram repetition)
+                    if has_repetitive_ngrams(summary_vi, n=3, min_unique_ratio=0.7):
                         continue
                     # =========================================================
 
