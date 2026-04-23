@@ -7,16 +7,19 @@ from functools import lru_cache
 # Import cấu hình từ file config.py của dự án
 from api.config import CORS_ORIGINS, SUMMARY_CHECKPOINTS, PROJECT_ROOT
 
-# Import Pydantic models từ file models.py
+# Import Pydantic models từ file models.py (Đã bổ sung ProcessResponse)
 from api.models import (
     TextRequest, TranslationRequest, ProcessRequest, 
-    SummaryResponse, TranslationResponse, EntitiesResponse, HealthResponse
+    SummaryResponse, TranslationResponse, EntitiesResponse, HealthResponse, ProcessResponse
 )
 
-# Import logic AI (Tùy chỉnh lại đường dẫn import nếu nhóm bạn để file ở chỗ khác)
+# Import logic AI 
 from relation_graph import build_relation_graph
 from summarization import HierarchicalSummarizer, VIT5Summarizer
 from translation import LocalMarianTranslator, TranslationUnavailableError
+
+# TODO: Khi nào Thành viên 3 up file NER lên, hãy bỏ dấu # ở dòng dưới để import
+# from models.ner.inference import extract_entities
 
 SPACE_RE = re.compile(r"\s+")
 
@@ -37,7 +40,6 @@ app.state.preload_status = {"vi_pipeline": "not_loaded"}
 def normalize_text(text: str) -> str:
     return SPACE_RE.sub(" ", text).strip()
 
-# Dùng đường dẫn Model từ config.py
 @lru_cache(maxsize=1)
 def get_vi_story_pipeline() -> HierarchicalSummarizer:
     checkpoint_dir = SUMMARY_CHECKPOINTS.get("vi")
@@ -91,6 +93,7 @@ def entities_from_graph(graph: dict) -> list:
         return []
     return [{"text": node.get("label", ""), "type": "CHARACTER", "mentions": node.get("mentions", 0)} for node in nodes]
 
+
 # --- APP EVENTS ---
 @app.on_event("startup")
 def preload_models() -> None:
@@ -99,6 +102,7 @@ def preload_models() -> None:
         app.state.preload_status = {"vi_pipeline": "loaded"}
     except Exception as exc:
         app.state.preload_status = {"vi_pipeline": "failed", "error": str(exc)}
+
 
 # --- ENDPOINTS ---
 @app.get("/health", response_model=HealthResponse)
@@ -141,9 +145,49 @@ def translate_en_to_vi(request: TranslationRequest):
         raise HTTPException(status_code=503, detail=note)
     return {"translated_text": translated_text, "note": note}
 
-@app.post("/api/extract-entities", response_model=EntitiesResponse)
-def extract_entities(request: TextRequest):
+# CỔNG SỐ 6 MỚI THÊM VÀO: FULL PROCESSING (TÓM TẮT + DỊCH + THỰC THỂ)
+@app.post("/api/process", response_model=ProcessResponse)
+def process_full_workflow(request: ProcessRequest):
     text = normalize_text(request.text)
-    graph = build_relation_graph(text)
-    entities = entities_from_graph(graph)
-    return {"entities": entities}
+    
+    try:
+        # 1. Tóm tắt tiếng Việt
+        pipeline_vi = get_vi_story_pipeline()
+        vi_summary_result = summarize_with_pipeline(pipeline_vi, text, request)
+        summary_vi = str(vi_summary_result["summary"])
+        
+        # 2. Dịch sang tiếng Anh
+        translated_text, _, _ = translate_text("vi", "en", text)
+        
+        # 3. Tóm tắt tiếng Anh
+        summary_en = None
+        pipeline_en = get_en_fallback_pipeline()
+        if pipeline_en:
+            en_summary_result = summarize_with_pipeline(pipeline_en, translated_text, request)
+            summary_en = str(en_summary_result["summary"])
+        
+        # 4. Trích xuất thực thể
+        # TODO: Đổi thành `entities = extract_entities(text)` khi TV3 làm xong
+        graph = build_relation_graph(text)
+        entities = entities_from_graph(graph)
+        
+        return {
+            "original_text": text,
+            "translated_text": translated_text,
+            "summary_vi": summary_vi,
+            "summary_en": summary_en,
+            "entities": entities
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi hệ thống: {str(e)}")
+
+@app.post("/api/extract-entities", response_model=EntitiesResponse)
+def extract_entities_endpoint(request: TextRequest):
+    text = normalize_text(request.text)
+    try:
+        # TODO: Đổi thành `entities = extract_entities(text)` khi TV3 làm xong
+        graph = build_relation_graph(text)
+        entities = entities_from_graph(graph)
+        return {"entities": entities}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
