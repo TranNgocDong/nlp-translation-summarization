@@ -10,6 +10,11 @@ DEFAULT_PREFIX = "summarize: "
 _LEADING_NOISE = re.compile(r"^[\s*\-•·–—+]+")
 _MID_NOISE = re.compile(r"[<>\[\]{}|~`^]+")
 _REPEAT_PUNCT = re.compile(r"([,.;:!?])\1+")
+_REPEAT_UNIGRAM = re.compile(r"\b([^\W\d_]+)\b(?:\s+\1\b)+", flags=re.IGNORECASE | re.UNICODE)
+_REPEAT_BIGRAM = re.compile(
+    r"\b([^\W\d_]+\s+[^\W\d_]+)\b(?:\s+\1\b)+",
+    flags=re.IGNORECASE | re.UNICODE,
+)
 
 
 def _normalize_input(text: str) -> str:
@@ -25,6 +30,9 @@ def _clean(text: str) -> str:
     text = _LEADING_NOISE.sub("", text).strip()
     text = _MID_NOISE.sub(" ", text)
     text = _REPEAT_PUNCT.sub(r"\1", text)
+    # Khử lặp từ/cụm liền kề kiểu "cứu hộ cứu hộ", "Sơn La Sơn La".
+    text = _REPEAT_BIGRAM.sub(r"\1", text)
+    text = _REPEAT_UNIGRAM.sub(r"\1", text)
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
@@ -41,7 +49,12 @@ class VIT5Summarizer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.prefix = prefix
         self.lang_label = lang_label
-        self.tokenizer = AutoTokenizer.from_pretrained(str(self.checkpoint_dir), use_fast=False)
+        # Dat legacy=True de tranh warning tokenizer T5 va giu dung hanh vi da train truoc day.
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            str(self.checkpoint_dir),
+            use_fast=False,
+            legacy=True,
+        )
         self.model = AutoModelForSeq2SeqLM.from_pretrained(str(self.checkpoint_dir))
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -55,12 +68,12 @@ class VIT5Summarizer:
         self,
         text: str,
         max_input_length: int = 1024,
-        max_new_tokens: int = 256,
-        min_new_tokens: int = 48,
-        num_beams: int = 4,
-        length_penalty: float = 1.15,
+        max_new_tokens: int = 160,
+        min_new_tokens: int = 24,
+        num_beams: int = 5,
+        length_penalty: float = 1.0,
         early_stopping: bool = True,
-        no_repeat_ngram_size: int = 3,
+        no_repeat_ngram_size: int = 2,
     ) -> dict[str, Any]:
         res = self.summarize_batch(
             [text],
@@ -79,12 +92,12 @@ class VIT5Summarizer:
         self,
         texts: list[str],
         max_input_length: int = 1024,
-        max_new_tokens: int = 256,
-        min_new_tokens: int = 48,
-        num_beams: int = 4,
-        length_penalty: float = 1.15,
+        max_new_tokens: int = 160,
+        min_new_tokens: int = 24,
+        num_beams: int = 5,
+        length_penalty: float = 1.0,
         early_stopping: bool = True,
-        no_repeat_ngram_size: int = 3,
+        no_repeat_ngram_size: int = 2,
     ) -> list[dict[str, Any]]:
         if not texts:
             return []
@@ -115,7 +128,8 @@ class VIT5Summarizer:
             "length_penalty": length_penalty,
             "early_stopping": early_stopping,
             "no_repeat_ngram_size": no_repeat_ngram_size,
-            "repetition_penalty": 1.2,      # Tăng lên 1.2 để chống lặp từ
+            "repetition_penalty": 1.25,
+            "renormalize_logits": True,
             "do_sample": False,
         }
         
