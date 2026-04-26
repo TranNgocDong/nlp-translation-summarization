@@ -1,0 +1,25 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./models:/app/models
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - PYTHONPATH=/app   
+    command: python -m api.main
+  ui:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - ./models:/app/models # Thêm dòng này luôn
+    environment:
+      - API_URL=http://api:8000
+    command: streamlit run UI/app.py --server.port 8501 --server.address 0.0.0.0
+    depends_on:
+      - api
