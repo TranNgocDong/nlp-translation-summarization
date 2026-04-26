@@ -115,7 +115,7 @@ class VIT5Summarizer:
             "length_penalty": length_penalty,
             "early_stopping": early_stopping,
             "no_repeat_ngram_size": no_repeat_ngram_size,
-            "repetition_penalty": 1.0, # Về mặc định 1.0 để AI tự nhiên nhất
+            "repetition_penalty": 1.2,      # Tăng lên 1.2 để chống lặp từ
             "do_sample": False,
         }
         
