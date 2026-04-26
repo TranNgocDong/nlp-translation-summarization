@@ -18,13 +18,17 @@ class ProcessRequest(BaseModel):
     target_lang: Literal["vi", "en"] = Field(default="en", description="Ngôn ngữ đích")
     
     # Các tham số điều chỉnh mô hình AI (đã cấu hình theo bài mẫu)
-    max_input_length: int = Field(default=512, ge=128, le=1024)
-    max_new_tokens: int = Field(default=160, ge=32, le=256)
-    min_new_tokens: int = Field(default=48, ge=0, le=128)
-    num_beams: int = Field(default=4, ge=1, le=8)
-    length_penalty: float = Field(default=1.15, ge=0.8, le=2.0)
-    chunk_size_words: int = Field(default=240, ge=120, le=400)
-    chunk_overlap_words: int = Field(default=40, ge=0, le=120)
+    max_input_length: int = Field(default=768, ge=128, le=1024)
+    max_new_tokens: int = Field(default=120, ge=32, le=256)
+    min_new_tokens: int = Field(default=24, ge=0, le=128)
+    num_beams: int = Field(default=5, ge=1, le=8)
+    length_penalty: float = Field(default=1.0, ge=0.8, le=2.0)
+    chunk_size_words: int = Field(default=180, ge=120, le=400)
+    chunk_overlap_words: int = Field(default=24, ge=0, le=120)
+    carry_prev_summary: bool = Field(
+        default=False,
+        description="Neu bat, moi chunk se duoc kem tom tat chunk truoc (de giu mach), nhung co the tang hallucination.",
+    )
 
 # --- RESPONSE MODELS (Dữ liệu API trả về cho UI) ---
 

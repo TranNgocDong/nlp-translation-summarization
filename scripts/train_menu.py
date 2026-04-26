@@ -12,6 +12,9 @@ TRAIN_SCRIPT_CANDIDATES = [
     PROJECT_ROOT / "models" / "trainModelsAI" / "train_vit5_summarize.py",
     PROJECT_ROOT / "scripts" / "train_vit5_summarize.py",
 ]
+SUMMARY_SCRIPT_CANDIDATES = [
+    PROJECT_ROOT / "scripts" / "02_generate_summary_openrouter.py",
+]
 
 
 def resolve_train_script() -> Path:
@@ -21,6 +24,16 @@ def resolve_train_script() -> Path:
     raise FileNotFoundError(
         "Khong tim thay script train. Da tim tai:\n"
         + "\n".join(f"- {candidate}" for candidate in TRAIN_SCRIPT_CANDIDATES)
+    )
+
+
+def resolve_summary_script() -> Path:
+    for path in SUMMARY_SCRIPT_CANDIDATES:
+        if path.exists():
+            return path
+    raise FileNotFoundError(
+        "Khong tim thay script tao du lieu OpenRouter. Da tim tai:\n"
+        + "\n".join(f"- {candidate}" for candidate in SUMMARY_SCRIPT_CANDIDATES)
     )
 
 
@@ -115,6 +128,50 @@ def run_pair(
 ) -> None:
     run_train_job(train_script, "vi", resume=resume, cpu=cpu, overrides=overrides)
     run_train_job(train_script, "en", resume=resume, cpu=cpu, overrides=overrides)
+
+
+def run_data_generation_openrouter(
+    summary_script: Path,
+    with_translation: bool = True,
+    limit: int = 300,
+    batch: int = 2,
+    retry: bool = False,
+    replace_output: bool = False,
+    translation_chars: int = 900,
+    output_path: str | None = None,
+) -> None:
+    cmd: list[str] = [
+        sys.executable,
+        str(summary_script),
+        "--limit",
+        str(limit),
+        "--batch",
+        str(batch),
+    ]
+
+    if retry:
+        cmd.append("--retry")
+    if replace_output:
+        cmd.append("--replace_output")
+
+    if with_translation:
+        cmd.append("--with_translation")
+        cmd.extend(["--translation_chars", str(translation_chars)])
+    else:
+        cmd.append("--no_translation")
+
+    if output_path:
+        cmd.extend(["--output", output_path])
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(PROJECT_ROOT)
+
+    print("\nDang chay lenh tao du lieu:")
+    print(" ".join(cmd))
+    print("-" * 72)
+    subprocess.run(cmd, cwd=str(PROJECT_ROOT), env=env, check=True)
+    print("-" * 72)
+    print("Hoan tat tao du lieu bang OpenRouter.")
 
 
 def prompt_overrides_for_4gb() -> dict[str, Any]:
@@ -242,6 +299,7 @@ def print_menu() -> None:
     print("5) Train tiep tuc tieng Anh (resume)")
     print("6) Train tiep tuc ca 2 (resume)")
     print("7) Custom (chon nguon du lieu + clean mode + resume + tham so)")
+    print("8) Tao data bang OpenRouter (summary + EN translation)")
     print("0) Thoat")
     print("===========================================")
 
@@ -303,6 +361,51 @@ def handle_custom(train_script: Path) -> None:
         run_train_job(train_script, lang_raw, resume=resume, cpu=cpu, overrides=overrides)
 
 
+def handle_openrouter_data(summary_script: Path) -> None:
+    print("\nTao du lieu train bang OpenRouter:")
+    with_translation = ask_yes_no(
+        "Sinh them text_en + summary_en (thay cho buoc 04_translate_data)?",
+        default=True,
+    )
+    limit = ask_int("limit", default=300) or 300
+    default_batch = 2 if with_translation else 5
+    batch = ask_int("batch", default=default_batch) or default_batch
+    retry = ask_yes_no("Chay lai tu file failed?", default=False)
+    replace_output = ask_yes_no("Ghi de output cu (--replace_output)?", default=False)
+    output_default = str(PROJECT_ROOT / "data" / "processed" / "train.jsonl")
+    output_raw = input(f"output_path [{output_default}]: ").strip()
+    output_path = output_raw or output_default
+
+    translation_chars = 900
+    if with_translation:
+        translation_chars = ask_int("translation_chars", default=900) or 900
+
+    print("\nCau hinh tao data:")
+    print(f"- with_translation: {with_translation}")
+    print(f"- limit: {limit}")
+    print(f"- batch: {batch}")
+    print(f"- retry: {retry}")
+    print(f"- replace_output: {replace_output}")
+    print(f"- output: {output_path}")
+    if with_translation:
+        print(f"- translation_chars: {translation_chars}")
+
+    if not ask_yes_no("Bat dau tao du lieu voi cau hinh tren?", default=True):
+        print("Huy theo yeu cau.")
+        return
+
+    run_data_generation_openrouter(
+        summary_script=summary_script,
+        with_translation=with_translation,
+        limit=limit,
+        batch=batch,
+        retry=retry,
+        replace_output=replace_output,
+        translation_chars=translation_chars,
+        output_path=output_path,
+    )
+
+
 def main() -> None:
     try:
         train_script = resolve_train_script()
@@ -310,7 +413,16 @@ def main() -> None:
         print(str(exc))
         raise SystemExit(1)
 
+    summary_script: Path | None
+    try:
+        summary_script = resolve_summary_script()
+    except FileNotFoundError as exc:
+        print(str(exc))
+        summary_script = None
+
     print("Su dung script train:", train_script)
+    if summary_script:
+        print("Su dung script data:", summary_script)
     while True:
         print_menu()
         choice = input("Nhap lua chon: ").strip()
@@ -329,6 +441,11 @@ def main() -> None:
                 run_pair(train_script, resume=True, cpu=False)
             elif choice == "7":
                 handle_custom(train_script)
+            elif choice == "8":
+                if not summary_script:
+                    print("Khong tim thay script OpenRouter de tao data.")
+                else:
+                    handle_openrouter_data(summary_script)
             elif choice == "0":
                 print("Da thoat train menu.")
                 return
