@@ -1,9 +1,48 @@
-import streamlit as st
-import requests
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import requests
+import streamlit as st
+
+
+def _ensure_streamlit_runtime() -> None:
+    """
+    Cho phep chay bang `python UI/app.py` ma van tu dong vao dung runtime Streamlit.
+    """
+    if __name__ != "__main__":
+        return
+
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        has_ctx = get_script_run_ctx() is not None
+    except Exception:
+        has_ctx = False
+
+    if has_ctx:
+        return
+
+    if os.environ.get("STREAMLIT_AUTO_BOOTSTRAPPED") == "1":
+        return
+
+    app_path = Path(__file__).resolve()
+    cmd = [sys.executable, "-m", "streamlit", "run", str(app_path)]
+
+    env = dict(os.environ)
+    env["STREAMLIT_AUTO_BOOTSTRAPPED"] = "1"
+
+    print("Dang khoi dong Streamlit runtime...")
+    print(" ".join(cmd))
+    subprocess.run(cmd, env=env, check=False)
+    raise SystemExit(0)
+
+
+_ensure_streamlit_runtime()
 
 # ===== CONFIG =====
-API_URL = "http://localhost:8000"
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="AI Text Processor", layout="wide")
 
@@ -64,14 +103,22 @@ if process_btn:
 
                     with col1:
                         st.subheader("📄 Văn bản gốc")
-                        st.write(result.get("original_text_vi", text_input))
+                        st.write(
+                            result.get("original_text")
+                            or result.get("original_text_vi")
+                            or text_input
+                        )
 
                         st.subheader("📝 Summary (VI)")
                         st.write(result.get("summary_vi", ""))
 
                     with col2:
                         st.subheader("🌍 Bản dịch")
-                        st.write(result.get("translated_text_en", ""))
+                        st.write(
+                            result.get("translated_text")
+                            or result.get("translated_text_en")
+                            or ""
+                        )
 
                         st.subheader("📝 Summary (EN)")
                         st.write(result.get("summary_en", ""))
