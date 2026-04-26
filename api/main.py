@@ -67,16 +67,17 @@ def get_translator(source_lang: str, target_lang: str) -> LocalMarianTranslator 
         return None
 
 def summarize_with_pipeline(pipeline: HierarchicalSummarizer, text: str, request: ProcessRequest) -> dict:
-    return pipeline.summarize_long_text(
+    # Đổi 'summarize_long_text' thành 'summarize'
+    # Và vì hàm summarize của TV2 trả về string, ta cần tự đóng gói nó thành dict cho khớp với API
+    summary_text = pipeline.summarize(
         text,
         max_input_length=request.max_input_length,
         max_new_tokens=request.max_new_tokens,
         min_new_tokens=request.min_new_tokens,
         num_beams=request.num_beams,
         length_penalty=request.length_penalty,
-        chunk_size_words=request.chunk_size_words,
-        chunk_overlap_words=request.chunk_overlap_words,
     )
+    return {"summary": summary_text}
 
 def translate_text(source_lang: str, target_lang: str, text: str) -> tuple[str, str, bool]:
     if source_lang == target_lang:
