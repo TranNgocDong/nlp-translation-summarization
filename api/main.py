@@ -226,7 +226,13 @@ def summarize_with_pipeline(pipeline: HierarchicalSummarizer, text: str, request
         chunk_overlap_words=request.chunk_overlap_words,
         carry_prev_summary=request.carry_prev_summary,
     )
-
+    return {
+        "summary": summary_text,
+        "metadata": {
+            "model": "VIT5",
+            "source_lang": request.source_lang
+        }
+}
 def get_pipeline_for_lang(lang: str) -> HierarchicalSummarizer | None:
     if lang == "vi":
         return get_vi_story_pipeline()
@@ -235,20 +241,27 @@ def get_pipeline_for_lang(lang: str) -> HierarchicalSummarizer | None:
     return None
 
 def translate_text(source_lang: str, target_lang: str, text: str) -> tuple[str, str, bool]:
-
     if source_lang == target_lang:
-
         return text, "Khong can dich vi ngon ngu nguon va dich giong nhau.", True
+
     backend = os.getenv("TRANSLATION_BACKEND", "auto").strip().lower()
     translator = get_translator(source_lang, target_lang, backend)
+    
     if translator is None:
         return text, (
             f"Khong khoi tao duoc backend dich ({backend}) cho huong {source_lang}->{target_lang}. "
             "Hay kiem tra env (CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN) hoac model local."
         ), False
+
+    # Thực hiện dịch
     translated = translator.translate(text)
 
-    return str(translated["translated_text"]), f"Dich bang model {translated['model_name']}.", True
+    # --- PHẦN SỬA ĐỂ TRÁNH LỖI 'model_name' ---
+    # Sử dụng .get() để lấy giá trị, nếu không có sẽ trả về "Unknown Model" hoặc ""
+    translated_text = str(translated.get("translated_text", text))
+    model_name = translated.get("model_name", "N/A")
+    
+    return translated_text, f"Dich bang model {model_name}.", True
 
 
 

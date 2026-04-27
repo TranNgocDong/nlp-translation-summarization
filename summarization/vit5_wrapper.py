@@ -74,6 +74,7 @@ class VIT5Summarizer:
         length_penalty: float = 1.0,
         early_stopping: bool = True,
         no_repeat_ngram_size: int = 2,
+        **kwargs
     ) -> dict[str, Any]:
         res = self.summarize_batch(
             [text],

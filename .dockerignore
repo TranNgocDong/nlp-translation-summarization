@@ -1,0 +1,27 @@
+# 1. Chặn môi trường ảo và thư viện (CỰC KỲ QUAN TRỌNG)
+venv/
+.env
+
+# 2. Chặn các model cực nặng (Để dùng cơ chế Mount Volume thay thế)
+models/
+
+# 3. Chặn các file rác của Python và IDE
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.qodo/
+
+# 4. Chặn các file dữ liệu và Notebook
+.ipynb_checkpoints/
+data/
+*.ipynb
+
+# 5. Chặn quản lý phiên bản
+.git/
+.gitignore
+
+# 6. Chặn các file rác của hệ điều hành
+.DS_Store
+Thumbs.db
