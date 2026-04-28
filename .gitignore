@@ -1,7 +1,8 @@
 env/
 __pycache__/
 *.pyc
-models/
+models/vit5-summarize-en/
+models/vit5-summarize-vi/
 .env
 **/__pycache__/
 venv/

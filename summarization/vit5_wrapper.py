@@ -1,6 +1,16 @@
+import sys
 import re
 from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+try:
+    import config
+except ImportError:
+    config = None
+
 
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -30,12 +40,15 @@ def _clean(text: str) -> str:
     text = _LEADING_NOISE.sub("", text).strip()
     text = _MID_NOISE.sub(" ", text)
     text = _REPEAT_PUNCT.sub(r"\1", text)
-    # Khử lặp từ/cụm liền kề kiểu "cứu hộ cứu hộ", "Sơn La Sơn La".
+    # Loại bỏ hoàn toàn dấu chấm phẩy theo yêu cầu (thay bằng dấu chấm phẩy thành dấu chấm hoặc xóa)
+    text = text.replace(";", ".")
+    # Khử lặp từ/cụm liền kề
     text = _REPEAT_BIGRAM.sub(r"\1", text)
     text = _REPEAT_UNIGRAM.sub(r"\1", text)
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
 
 
 class VIT5Summarizer:
@@ -67,15 +80,16 @@ class VIT5Summarizer:
     def summarize(
         self,
         text: str,
-        max_input_length: int = 1024,
-        max_new_tokens: int = 160,
-        min_new_tokens: int = 24,
-        num_beams: int = 5,
-        length_penalty: float = 1.0,
-        early_stopping: bool = True,
-        no_repeat_ngram_size: int = 2,
+        max_input_length: int = config.MAX_INPUT_LENGTH_INFERENCE if config else 1024,
+        max_new_tokens: int = config.MAX_NEW_TOKENS if config else 160,
+        min_new_tokens: int = config.MIN_NEW_TOKENS if config else 24,
+        num_beams: int = config.NUM_BEAMS if config else 5,
+        length_penalty: float = config.LENGTH_PENALTY if config else 1.0,
+        early_stopping: bool = config.EARLY_STOPPING if config else True,
+        no_repeat_ngram_size: int = config.NO_REPEAT_NGRAM_SIZE if config else 2,
         **kwargs
     ) -> dict[str, Any]:
+
         res = self.summarize_batch(
             [text],
             max_input_length=max_input_length,
@@ -92,14 +106,15 @@ class VIT5Summarizer:
     def summarize_batch(
         self,
         texts: list[str],
-        max_input_length: int = 1024,
-        max_new_tokens: int = 160,
-        min_new_tokens: int = 24,
-        num_beams: int = 5,
-        length_penalty: float = 1.0,
-        early_stopping: bool = True,
-        no_repeat_ngram_size: int = 2,
+        max_input_length: int = config.MAX_INPUT_LENGTH_INFERENCE if config else 1024,
+        max_new_tokens: int = config.MAX_NEW_TOKENS if config else 160,
+        min_new_tokens: int = config.MIN_NEW_TOKENS if config else 24,
+        num_beams: int = config.NUM_BEAMS if config else 5,
+        length_penalty: float = config.LENGTH_PENALTY if config else 1.0,
+        early_stopping: bool = config.EARLY_STOPPING if config else True,
+        no_repeat_ngram_size: int = config.NO_REPEAT_NGRAM_SIZE if config else 2,
     ) -> list[dict[str, Any]]:
+
         if not texts:
             return []
             
@@ -129,10 +144,11 @@ class VIT5Summarizer:
             "length_penalty": length_penalty,
             "early_stopping": early_stopping,
             "no_repeat_ngram_size": no_repeat_ngram_size,
-            "repetition_penalty": 1.25,
+            "repetition_penalty": config.REPETITION_PENALTY if config else 1.25,
             "renormalize_logits": True,
             "do_sample": False,
         }
+
         
         out_ids = self.model.generate(**enc, **gen_kw)
         decoded_list = self.tokenizer.batch_decode(out_ids, skip_special_tokens=True)

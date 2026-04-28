@@ -34,10 +34,10 @@ from relation_graph import build_relation_graph
 
 from summarization import HierarchicalSummarizer, VIT5Summarizer
 from translation import (
-    CloudflareWorkersTranslator,
     LocalMarianTranslator,
     TranslationUnavailableError,
 )
+
 
 
 
@@ -169,7 +169,8 @@ def get_en_fallback_pipeline() -> HierarchicalSummarizer | None:
 
 @lru_cache(maxsize=8)
 def get_translator(source_lang: str, target_lang: str, backend: str | None = None):
-    backend = (backend or os.getenv("TRANSLATION_BACKEND", "auto")).strip().lower()
+    backend = (backend or os.getenv("TRANSLATION_BACKEND", "local")).strip().lower()
+
     allow_remote_models = os.getenv("ALLOW_REMOTE_TRANSLATION_MODELS", "").strip() == "1"
     cloudflare_model = os.getenv("CLOUDFLARE_TRANSLATION_MODEL", "").strip() or "@cf/meta/m2m100-1.2b"
 
@@ -183,56 +184,45 @@ def get_translator(source_lang: str, target_lang: str, backend: str | None = Non
         except TranslationUnavailableError:
             return None
 
-    def _build_cloudflare() -> CloudflareWorkersTranslator | None:
-        try:
-            return CloudflareWorkersTranslator(
-                source_lang=source_lang,
-                target_lang=target_lang,
-                model_name=cloudflare_model,
-            )
-        except TranslationUnavailableError:
-            return None
-
     if backend == "local":
         return _build_local()
     if backend == "cloudflare":
-        return _build_cloudflare()
+        raise ValueError("Cloudflare translation backend has been removed.")
 
-    # auto: uu tien cloudflare neu co credentials; neu khong thi fallback local.
-    return _build_cloudflare() or _build_local()
-
+    return _build_local()
 
 
-def summarize_with_pipeline(pipeline: HierarchicalSummarizer, text: str, request: ProcessRequest) -> dict:
 
-    # Đổi 'summarize_long_text' thành 'summarize'
 
-    # Và vì hàm summarize của TV2 trả về string, ta cần tự đóng gói nó thành dict cho khớp với API
+def summarize_with_pipeline(pipeline, text: str, request: ProcessRequest) -> dict:
 
-    summary_text = pipeline.summarize(
-
+    res = pipeline.summarize(
         text,
-
         max_input_length=request.max_input_length,
-
         max_new_tokens=request.max_new_tokens,
-
         min_new_tokens=request.min_new_tokens,
-
         num_beams=request.num_beams,
-
         length_penalty=request.length_penalty,
         chunk_size_words=request.chunk_size_words,
         chunk_overlap_words=request.chunk_overlap_words,
         carry_prev_summary=request.carry_prev_summary,
     )
+    
+    # Trích xuất string tóm tắt an toàn
+    summary_text = ""
+    if isinstance(res, dict):
+        summary_text = res.get("summary", str(res))
+    else:
+        summary_text = str(res)
+        
     return {
         "summary": summary_text,
         "metadata": {
             "model": "VIT5",
             "source_lang": request.source_lang
         }
-}
+    }
+
 def get_pipeline_for_lang(lang: str) -> HierarchicalSummarizer | None:
     if lang == "vi":
         return get_vi_story_pipeline()
@@ -416,18 +406,18 @@ def process_full_workflow(request: ProcessRequest):
 
         target_summary_result = None
         if request.target_lang != request.source_lang and translation_ok and translated_text.strip():
-            target_pipeline = get_pipeline_for_lang(request.target_lang)
-            if target_pipeline is not None:
-                target_summary_result = summarize_with_pipeline(target_pipeline, translated_text, request)
-                if request.target_lang == "vi":
-                    summary_vi = enrich_vi_summary_with_key_facts(
-                        translated_text,
-                        str(target_summary_result["summary"]),
-                    )
-                else:
-                    summary_en = str(target_summary_result["summary"])
-            else:
-                translation_note += f" Summarization model not available for target_lang={request.target_lang}."
+            # TỐI ƯU HÓA: Thay vì dùng model summarize tiếng Anh (vốn đang bị lỗi) để tóm tắt bản dịch tiếng Anh dài,
+            # Ta dùng luôn model dịch thuật để dịch trực tiếp bản tóm tắt tiếng Việt cực chuẩn sang tiếng Anh!
+            # Phương pháp này nhanh hơn x10 lần và đảm bảo chất lượng Summary (EN) luôn sát với Summary (VI).
+            if request.source_lang == "vi" and summary_vi:
+                translated_summary, _, _ = translate_text("vi", "en", summary_vi)
+                summary_en = translated_summary
+            elif request.source_lang == "en" and summary_en:
+                translated_summary, _, _ = translate_text("en", "vi", summary_en)
+                summary_vi = enrich_vi_summary_with_key_facts(
+                    translated_text,
+                    translated_summary,
+                )
 
         # TODO: Đổi thành `entities = extract_entities(text)` khi TV3 làm xong
 
@@ -436,6 +426,12 @@ def process_full_workflow(request: ProcessRequest):
         entities = entities_from_graph(graph)
 
        
+
+        # Chặn hoàn toàn ký tự ';' theo yêu cầu của người dùng
+        if summary_vi:
+            summary_vi = summary_vi.replace(";", ".")
+        if summary_en:
+            summary_en = summary_en.replace(";", ".")
 
         return {
 

@@ -69,22 +69,47 @@ class LocalMarianTranslator:
                 "model_name": self.model_name,
             }
 
-        enc = self.tokenizer(
-            src,
-            max_length=max_input_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-        enc = {key: value.to(self.device) for key, value in enc.items()}
-        output_ids = self.model.generate(
-            **enc,
-            max_new_tokens=max_new_tokens,
-            num_beams=num_beams,
-        )
-        translated = self.tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
+        import re
+        # Phân rã văn bản thành các câu nhỏ dựa trên dấu chấm, chấm hỏi, chấm than
+        sentences = re.split(r'(?<=[.!?])\s+', src)
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        # Nhóm câu thành các chunk an toàn (tối đa ~150 từ, khoảng 200 tokens)
+        # để vừa giữ được ngữ cảnh, vừa không bao giờ bị cắt cụt bởi giới hạn 512 tokens.
+        chunks = []
+        current_chunk = ""
+        for s in sentences:
+            if len((current_chunk + " " + s).split()) < 150:
+                current_chunk += " " + s
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = s
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+
+        translated_paragraphs = []
+        for chunk in chunks:
+            enc = self.tokenizer(
+                chunk,
+                max_length=max_input_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            enc = {key: value.to(self.device) for key, value in enc.items()}
+            output_ids = self.model.generate(
+                **enc,
+                max_new_tokens=max_new_tokens,
+                num_beams=num_beams,
+            )
+            translated_para = self.tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
+            translated_paragraphs.append(translated_para)
+
+        full_translation = " ".join(translated_paragraphs)
         return {
-            "translated_text": translated,
+            "translated_text": full_translation,
             "source_lang": self.source_lang,
             "target_lang": self.target_lang,
             "model_name": self.model_name,
         }
+

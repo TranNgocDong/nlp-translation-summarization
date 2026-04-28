@@ -188,7 +188,7 @@ def prompt_overrides_for_4gb() -> dict[str, Any]:
 
 def choose_data_profile() -> dict[str, Any]:
     openrouter = PROJECT_ROOT / "data" / "summary_data_openrouter.jsonl"
-    train_processed = PROJECT_ROOT / "data" / "processed" / "train.jsonl"
+    train_processed = PROJECT_ROOT / "data" / "dataset_translated.jsonl"
     val_processed = PROJECT_ROOT / "data" / "processed" / "val.jsonl"
 
     print("\nChon nguon du lieu:")
@@ -236,7 +236,7 @@ def print_overrides(overrides: dict[str, Any]) -> None:
 
 def choose_recommended_profile() -> dict[str, Any] | None:
     openrouter = PROJECT_ROOT / "data" / "summary_data_openrouter.jsonl"
-    train_processed = PROJECT_ROOT / "data" / "processed" / "train.jsonl"
+    train_processed = PROJECT_ROOT / "data" / "dataset_translated.jsonl"
     val_processed = PROJECT_ROOT / "data" / "processed" / "val.jsonl"
 
     print("\nChon preset toi uu:")
