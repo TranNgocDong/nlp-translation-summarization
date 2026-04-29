@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from tqdm import tqdm
+from datetime import datetime
 
 import torch
 from transformers import MarianMTModel, MarianTokenizer
@@ -15,15 +16,19 @@ INPUT_FILE = "data/summary_data.jsonl"
 OUTPUT_FILE = "data/translated_data.jsonl"
 
 def translate_text(text):
-    if not text or text.strip() == "": return ""
+    if not text or text.strip() == "": return "", False
     try:
+        # Kiểm tra xem có bị truncate bởi tokenizer không (max_length=512 tokens)
+        token_count = len(tokenizer.encode(text))
+        truncated = token_count > 512
+        
         inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
         with torch.no_grad():
             translated = model.generate(**inputs)
-        return tokenizer.decode(translated[0], skip_special_tokens=True)
+        return tokenizer.decode(translated[0], skip_special_tokens=True), truncated
     except Exception as e:
         print(f"Lỗi khi dịch: {e}")
-        return ""
+        return "", False
 
 def load_translated_map(path):
     m = {}
@@ -64,9 +69,19 @@ def main():
             data_out.append(cached[key])
             continue
             
-        # Dịch tóm tắt và một đoạn văn bản gốc
-        item["summary_en"] = translate_text(item.get("summary_vi", ""))
-        item["text_en"] = translate_text(item.get("text_vi", "")[:800]) # Giới hạn độ dài dịch
+        # Dịch tóm tắt và toàn bộ văn bản gốc (không truncate cứng 800 ký tự)
+        summary_en, _ = translate_text(item.get("summary_vi", ""))
+        text_en, truncated = translate_text(item.get("text_vi", ""))
+        
+        item["summary_en"] = summary_en
+        item["text_en"] = text_en
+        
+        # Lưu metadata
+        item["translated_by"] = "Helsinki-NLP/opus-mt-vi-en"
+        item["translated_at"] = datetime.now().isoformat()
+        item["source_length"] = len(item.get("text_vi", ""))
+        item["truncated"] = truncated
+        
         data_out.append(item)
 
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)

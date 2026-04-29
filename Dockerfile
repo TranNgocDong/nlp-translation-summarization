@@ -22,4 +22,4 @@ EXPOSE 8000
 EXPOSE 8501
 
 # Lệnh khởi chạy mặc định (Docker Compose sẽ ghi đè lệnh này)
-CMD ["python", "server.py"]
+CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

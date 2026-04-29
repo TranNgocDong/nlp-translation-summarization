@@ -94,6 +94,7 @@ def main():
 
     save_jsonl(train, TRAIN_FILE)
     save_jsonl(val, VAL_FILE)
+
     print(f"✅ Hoàn tất: Train ({len(train)} bài), Val ({len(val)} bài)")
 
 if __name__ == "__main__":

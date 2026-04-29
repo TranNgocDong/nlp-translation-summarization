@@ -17,31 +17,28 @@ Chạy lệnh:
 Set-Location "d:\AI\DA\nlp-translation-summarization"
 ```
 
-### Bước 2: Cài PyTorch (GPU NVIDIA)
+### Bước 2: Cài đặt thư viện
 
-Nếu máy có GPU NVIDIA (ví dụ RTX 3050), nên cài PyTorch bản có CUDA trước để train/inference dùng GPU:
+Tùy thuộc vào phần cứng của bạn, hãy chọn file requirements phù hợp:
 
+#### GPU CUDA 12.4
 ```powershell
-python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+python -m pip install -r requirements-cuda.txt
 ```
 
-Kiểm tra nhanh:
+#### CPU Only
+```powershell
+python -m pip install -r requirements-cpu.txt
+```
 
+Kiểm tra nhanh (đối với bản CUDA):
 ```powershell
 python -c "import torch; print(torch.cuda.is_available(), torch.__version__)"
 ```
-
 Nếu in ra `True` và phiên bản có hậu tố `+cu124` thì GPU đã được PyTorch nhận.
 
-### Bước 3: Cài thư viện cần thiết
 
-Chạy lệnh:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-### Bước 4: Huấn luyện model nếu chưa có checkpoint
+### Bước 3: Huấn luyện model nếu chưa có checkpoint
 
 Nếu trong thư mục `models/` chưa có:
 
@@ -73,7 +70,7 @@ python models/trainModelsAI/train_vit5_summarize.py --lang en
 
 Nếu đã có sẵn checkpoint thì có thể bỏ qua bước này.
 
-### Bước 5: Chạy server API
+### Bước 4: Chạy server API
 
 Chạy lệnh:
 
@@ -88,7 +85,7 @@ Sau khi chạy, server mặc định lắng nghe tại:
 - `http://localhost:8000`
 - `http://localhost:8000/health`
 
-### Bước 6: Chạy giao diện Streamlit
+### Bước 5: Chạy giao diện Streamlit
 
 Mở một terminal khác rồi chạy:
 
@@ -109,7 +106,7 @@ Sau đó mở trình duyệt tại:
 
 - `http://localhost:8501`
 
-### Bước 7: Sử dụng trên giao diện
+### Bước 6: Sử dụng trên giao diện
 
 Quy trình sử dụng cơ bản:
 
@@ -125,7 +122,7 @@ Quy trình sử dụng cơ bản:
 - `relation_graph`
 - `metadata`
 
-### Bước 8: Thử suy luận bằng dòng lệnh
+### Bước 7: Thử suy luận bằng dòng lệnh
 
 Ví dụ tóm tắt tiếng Việt:
 
@@ -153,7 +150,7 @@ python models/summarization/inference_vit5_summarize.py --lang both --text_vi "N
 
 ## Lưu ý
 
-- File `requirements.txt` không ghim `torch` để tránh cài nhầm bản CPU-only (`+cpu`). Hãy cài PyTorch theo **Bước 2** (CUDA) hoặc theo hướng dẫn trên trang chủ PyTorch nếu chỉ dùng CPU.
+- Dự án cung cấp `requirements-cuda.txt` và `requirements-cpu.txt` để hỗ trợ cả môi trường GPU và CPU. Hãy chọn file phù hợp khi cài đặt.
 - GPU 4GB có thể đủ cho inference; khi train `ViT5-base` nếu hết VRAM thì thử giảm `batch_size` trong script train.
 - Streamlit cần được chạy bằng lệnh `python -m streamlit run UI/app.py`, không chạy trực tiếp bằng `python UI/app.py`.
 - Khi train model hoặc chạy inference, nên thiết lập `PYTHONPATH` bằng lệnh `($env:PYTHONPATH = (Get-Location).Path)`.

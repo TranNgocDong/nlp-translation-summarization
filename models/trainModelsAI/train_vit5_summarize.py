@@ -345,10 +345,15 @@ def main():
 
     if args.lang == "vi":
         text_key, summary_key = "text_vi", "summary_vi"
+        allow_fallback = not args.strict_fields
     else:
         text_key, summary_key = "text_en", "summary_en"
+        # Mặc định bật strict field khi train English (không cho fallback từ VI)
+        allow_fallback = False
+
 
     out = args.output_dir or (PROJECT_ROOT / "models" / f"vit5-summarize-{args.lang}")
+
     out.mkdir(parents=True, exist_ok=True)
 
     resume_checkpoint: Path | None = None
@@ -451,7 +456,7 @@ def main():
         max_input=args.max_input,
         max_target=args.max_target,
         text_clean_mode=args.text_clean_mode,
-        allow_field_fallback=not args.strict_fields,
+        allow_field_fallback=allow_fallback,
     )
     val_ds = None
     if not args.disable_eval:
@@ -463,7 +468,7 @@ def main():
             max_input=args.max_input,
             max_target=args.max_target,
             text_clean_mode=args.text_clean_mode,
-            allow_field_fallback=not args.strict_fields,
+            allow_field_fallback=allow_fallback,
         )
     else:
         print("--- Disable eval: se bo qua val dataset va evaluate() de uu tien toc do ---")
