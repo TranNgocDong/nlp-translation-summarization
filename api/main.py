@@ -1,3 +1,5 @@
+from email.mime import text
+
 from fastapi import FastAPI, HTTPException
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,9 +43,8 @@ from translation import (
 
 
 
-# TODO: Khi nào Thành viên 3 up file NER lên, hãy bỏ dấu # ở dòng dưới để import
 
-# from models.ner.inference import extract_entities
+from models.ner import extract_entities, NERUnavailableError
 
 
 
@@ -265,7 +266,29 @@ def entities_from_graph(graph: dict) -> list:
 
     return [{"text": node.get("label", ""), "type": "CHARACTER", "mentions": node.get("mentions", 0)} for node in nodes]
 
-
+def entities_from_underthesea(text: str) -> list:
+    try:
+        # Trước khi gọi NER, đảm bảo text là string sạch
+        text = str(text).strip()
+        
+        # Gọi hàm extract từ Underthesea
+        raw = extract_entities(text) 
+        
+        out = []
+        for e in raw:
+            # Kiểm tra kỹ cấu trúc dictionary trả về
+            t = str(e.get("text", "")).strip()
+            ty = str(e.get("type", "")).strip() or "MISC"
+            if not t:
+                continue
+            mentions = text.count(t)
+            out.append({"text": t, "type": ty, "mentions": int(mentions)})
+        return out
+    except Exception as e:
+        # Nếu gặp lỗi 'vocab' hoặc bất cứ lỗi gì của Underthesea
+        print(f"Lỗi NER Underthesea: {e}")
+        # Bắn lỗi này để hàm process_full_workflow chuyển sang dùng Graph (Dòng 438)
+        raise NERUnavailableError(str(e))
 
 
 
@@ -419,12 +442,14 @@ def process_full_workflow(request: ProcessRequest):
                     translated_summary,
                 )
 
-        # TODO: Đổi thành `entities = extract_entities(text)` khi TV3 làm xong
-
-        graph = build_relation_graph(text)
-
-        entities = entities_from_graph(graph)
-
+        try:
+            entities = entities_from_underthesea(text)
+        except NERUnavailableError:
+            graph = build_relation_graph(text)
+            entities = entities_from_graph(graph)
+        else:
+            # vẫn build graph để trả relation_graph như hiện tại
+            graph = build_relation_graph(text)
        
 
         # Chặn hoàn toàn ký tự ';' theo yêu cầu của người dùng
@@ -455,6 +480,8 @@ def process_full_workflow(request: ProcessRequest):
         }
 
     except Exception as e:
+        import traceback
+        traceback.print_exc() # Thêm dòng này để xem lỗi chi tiết tại Terminal
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Lỗi hệ thống: {str(e)}")
@@ -469,13 +496,14 @@ def extract_entities_endpoint(request: TextRequest):
 
     try:
 
-        # TODO: Đổi thành `entities = extract_entities(text)` khi TV3 làm xong
-
-        graph = build_relation_graph(text)
-
-        entities = entities_from_graph(graph)
+        # Ưu tiên NER Underthesea
+        entities = entities_from_underthesea(text)
 
         return {"entities": entities}
-
+    except NERUnavailableError:
+        # Fallback nếu máy chưa cài underthesea
+        graph = build_relation_graph(text)
+        entities = entities_from_graph(graph)
+        return {"entities": entities}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
