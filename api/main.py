@@ -44,7 +44,7 @@ from translation import (
 
 
 
-from models.ner import extract_entities, NERUnavailableError
+from models.ner import extract_entities, NERUnavailableError, TransformersNERUnavailableError
 
 
 
@@ -284,10 +284,10 @@ def entities_from_underthesea(text: str) -> list:
             mentions = text.count(t)
             out.append({"text": t, "type": ty, "mentions": int(mentions)})
         return out
+    except (NERUnavailableError, TransformersNERUnavailableError):
+        raise
     except Exception as e:
-        # Nếu gặp lỗi 'vocab' hoặc bất cứ lỗi gì của Underthesea
-        print(f"Lỗi NER Underthesea: {e}")
-        # Bắn lỗi này để hàm process_full_workflow chuyển sang dùng Graph (Dòng 438)
+        # lỗi không xác định => coi như NER hỏng để fallback graph
         raise NERUnavailableError(str(e))
 
 
@@ -444,7 +444,7 @@ def process_full_workflow(request: ProcessRequest):
 
         try:
             entities = entities_from_underthesea(text)
-        except NERUnavailableError:
+        except (NERUnavailableError, TransformersNERUnavailableError):
             graph = build_relation_graph(text)
             entities = entities_from_graph(graph)
         else:
@@ -500,7 +500,7 @@ def extract_entities_endpoint(request: TextRequest):
         entities = entities_from_underthesea(text)
 
         return {"entities": entities}
-    except NERUnavailableError:
+    except (NERUnavailableError, TransformersNERUnavailableError):
         # Fallback nếu máy chưa cài underthesea
         graph = build_relation_graph(text)
         entities = entities_from_graph(graph)

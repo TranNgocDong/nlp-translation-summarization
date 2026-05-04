@@ -64,11 +64,15 @@ streamlit==1.56.0
 sympy==1.13.1
 tenacity==9.1.4
 tiktoken==0.12.0
-tokenizers==0.22.2
+
+# --- NER (Transformers + Underthesea) ---
+tokenizers==0.19.1
+transformers==4.44.2
+underthesea
+
 toml==0.10.2
 tornado==6.5.5
 tqdm==4.67.3
-transformers==4.57.6
 typer==0.24.1
 typing_extensions==4.15.0
 tzdata==2025.3
@@ -76,6 +80,3 @@ urllib3==2.6.3
 watchdog==6.0.0
 rouge_score
 trl
-python-dotenv
-pytest
-underthesea
